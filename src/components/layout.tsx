@@ -31,7 +31,17 @@ export function ScreenContainer({
 }: PropsWithChildren<ViewProps>) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }, style]}>
+    <View
+      style={[
+        styles.screen,
+        {
+          paddingTop: insets.top,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+        style,
+      ]}
+    >
       {children}
     </View>
   );
@@ -41,7 +51,8 @@ export function KeyboardSafeScreen({ children }: PropsWithChildren) {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
       {children}
     </KeyboardAvoidingView>
@@ -50,13 +61,22 @@ export function KeyboardSafeScreen({ children }: PropsWithChildren) {
 
 export function SafeScrollView({
   contentContainerStyle,
+  style,
+  keyboardDismissMode,
+  keyboardShouldPersistTaps,
   ...props
 }: ScrollViewProps) {
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
-      keyboardShouldPersistTaps="handled"
       {...props}
+      style={[styles.flex, style]}
+      keyboardDismissMode={
+        keyboardDismissMode ||
+        (Platform.OS === 'ios' ? 'interactive' : 'on-drag')
+      }
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps || 'handled'}
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       contentContainerStyle={[
         styles.scrollContent,
         { paddingBottom: Math.max(insets.bottom, 8) + 24 },
@@ -70,7 +90,14 @@ export function SafeAdContainer({ children }: PropsWithChildren) {
   const insets = useSafeAreaInsets();
   return (
     <View
-      style={[styles.ad, { paddingBottom: Math.max(insets.bottom, 0) }]}
+      style={[
+        styles.ad,
+        {
+          paddingBottom: Math.max(insets.bottom, 0),
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+      ]}
       accessibilityLabel="Advertisement"
     >
       {children}
@@ -96,7 +123,14 @@ export function SafeBottomBar({
   const insets = useSafeAreaInsets();
   return (
     <View
-      style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 8) }]}
+      style={[
+        styles.bottom,
+        {
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingLeft: Math.max(insets.left, 8),
+          paddingRight: Math.max(insets.right, 8),
+        },
+      ]}
     >
       {tabs.map(([key, label, icon]) => (
         <Pressable
@@ -104,7 +138,7 @@ export function SafeBottomBar({
           accessibilityState={{ selected: selected === key }}
           key={key}
           onPress={() => onSelect(key)}
-          style={styles.tab}
+          style={[styles.tab, selected === key && styles.tabActive]}
         >
           <Text
             style={[styles.tabIcon, selected === key && styles.tabSelected]}
@@ -123,8 +157,8 @@ export function SafeBottomBar({
 }
 
 const lightStyles = StyleSheet.create({
-  shell: { flex: 1, backgroundColor: '#F7F3EB' },
-  screen: { flex: 1, backgroundColor: '#F7F3EB' },
+  shell: { flex: 1, backgroundColor: '#F5F7F4' },
+  screen: { flex: 1, backgroundColor: '#F5F7F4' },
   flex: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 32 },
   ad: {
@@ -137,10 +171,16 @@ const lightStyles = StyleSheet.create({
   },
   bottom: {
     flexDirection: 'row',
-    backgroundColor: '#123D36',
-    paddingTop: 8,
+    backgroundColor: '#FFF',
+    paddingTop: 6,
+    paddingHorizontal: 8,
     borderTopWidth: 1,
-    borderTopColor: '#2C574E',
+    borderTopColor: '#E2E9E5',
+    shadowColor: '#173F38',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 10,
   },
   tab: {
     flex: 1,
@@ -148,16 +188,23 @@ const lightStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
+    borderRadius: 16,
   },
-  tabIcon: { fontSize: 19, color: '#9BB9B0' },
-  tabLabel: { fontSize: 11, fontWeight: '700', color: '#B8CCC6' },
-  tabSelected: { color: '#FFF3D8' },
+  tabActive: { backgroundColor: '#E8F3EF' },
+  tabIcon: { fontSize: 19, color: '#789089' },
+  tabLabel: { fontSize: 11, fontWeight: '700', color: '#6C817B' },
+  tabSelected: { color: '#0F6654' },
 });
 
 const darkStyles = StyleSheet.create({
   shell: { backgroundColor: '#0F1715' },
   screen: { backgroundColor: '#0F1715' },
   ad: { backgroundColor: '#17231F', borderColor: '#34443F' },
+  bottom: { backgroundColor: '#14201D', borderTopColor: '#2B3B36' },
+  tabActive: { backgroundColor: '#234039' },
+  tabIcon: { color: '#839A93' },
+  tabLabel: { color: '#9AAFA9' },
+  tabSelected: { color: '#C9F0E5' },
 });
 
 const styles = new Proxy(lightStyles, {

@@ -12,9 +12,18 @@ import {
   SafeScrollView,
   ScreenContainer,
 } from '../components/layout';
-import type { ExtractedItem, JournalEntry, VaultSettings } from '../models';
+import type {
+  ExtractedItem,
+  JournalEntry,
+  JournalMode,
+  VaultSettings,
+} from '../models';
 import { Documents, Vosk, VoskEvents } from '../native';
-import { analyzeEntry, cancelEntryAnalysis } from '../services/analysis';
+import {
+  cancelEntryAnalysis,
+  queueEntryAnalysis,
+  retryPendingAnalysisJobs,
+} from '../services/analysis';
 import { appendTranscript, localDate, newId } from '../services/text';
 import { invalidateEntryReferences, Vault } from '../services/vault';
 import { styles } from '../theme';
@@ -40,11 +49,59 @@ const SAMPLE_ENTRIES: JournalEntry[] = [
     updatedAt: '2026-10-18T13:00:00Z',
     title: 'A calmer launch plan',
     body: 'I want to test the workshop idea with five conversations before choosing a venue. I value leaving room for family evenings.',
+    mode: 'goal',
     inputSource: 'typed',
     tags: ['sample', 'planning'],
     analysisState: 'complete',
   },
 ];
+
+const JOURNAL_MODES: Array<{
+  key: JournalMode;
+  title: string;
+  detail: string;
+  prompt: string;
+  mark: string;
+}> = [
+  {
+    key: 'free',
+    title: 'Free write',
+    detail: 'Follow the thought',
+    prompt: 'What is on your mind?',
+    mark: '✦',
+  },
+  {
+    key: 'check-in',
+    title: 'Daily check-in',
+    detail: 'Notice today',
+    prompt: 'How are you arriving today?',
+    mark: '◌',
+  },
+  {
+    key: 'goal',
+    title: 'Goal review',
+    detail: 'Progress and next move',
+    prompt: 'What moved forward, and what comes next?',
+    mark: '↗',
+  },
+  {
+    key: 'decision',
+    title: 'Decision',
+    detail: 'Options and reasons',
+    prompt: 'What decision are you working through?',
+    mark: '◇',
+  },
+  {
+    key: 'idea',
+    title: 'Idea capture',
+    detail: 'Shape a possibility',
+    prompt: 'What idea do you want to explore?',
+    mark: '◎',
+  },
+];
+
+const journalMode = (mode?: JournalMode) =>
+  JOURNAL_MODES.find(value => value.key === mode) || JOURNAL_MODES[0];
 
 export function JournalScreen({
   refresh,
@@ -55,7 +112,7 @@ export function JournalScreen({
 }: {
   refresh: number;
   sampleMode: boolean;
-  onNew: () => void;
+  onNew: (mode: JournalMode) => void;
   onOpen: (entry: JournalEntry) => void;
   onSettings: () => void;
 }) {
@@ -71,34 +128,78 @@ export function JournalScreen({
     });
   }, [refresh]);
   const samples = sampleMode && entries.length === 0;
-  const values = (samples ? SAMPLE_ENTRIES : entries).filter(
-    item =>
-      (!search ||
-        `${item.title} ${item.body} ${item.tags.join(' ')}`
-          .toLowerCase()
-          .includes(search.toLowerCase())) &&
-      (!date || item.journalDate === date),
+  const values = (samples ? SAMPLE_ENTRIES : entries)
+    .filter(
+      item =>
+        (!search ||
+          `${item.title} ${item.body} ${item.tags.join(' ')}`
+            .toLowerCase()
+            .includes(search.toLowerCase())) &&
+        (!date || item.journalDate === date),
+    )
+    .sort(
+      (a, b) =>
+        b.journalDate.localeCompare(a.journalDate) ||
+        b.updatedAt.localeCompare(a.updatedAt),
+    );
+  const groups = values.reduce<Array<[string, JournalEntry[]]>>(
+    (result, entry) => {
+      const current = result[result.length - 1];
+      if (current?.[0] === entry.journalDate) current[1].push(entry);
+      else result.push([entry.journalDate, [entry]]);
+      return result;
+    },
+    [],
   );
   return (
     <ScreenContainer>
       <Header title="Journal" onSettings={onSettings} />
-      <View style={styles.filterRow}>
-        <TextInput
-          accessibilityLabel="Search journal"
-          placeholder="Search your encrypted journal"
-          value={search}
-          onChangeText={setSearch}
-          style={[styles.input, styles.search]}
-        />
-        <TextInput
-          accessibilityLabel="Filter by date"
-          placeholder="YYYY-MM-DD"
-          value={date}
-          onChangeText={setDate}
-          style={[styles.input, styles.dateInput]}
-        />
-      </View>
       <SafeScrollView>
+        <View style={styles.dashboardIntro}>
+          <Text style={styles.overline}>Start where you are</Text>
+          <Text style={styles.h1}>How do you want to journal?</Text>
+        </View>
+        <View style={styles.modeGrid}>
+          {JOURNAL_MODES.map(mode => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={mode.title}
+              key={mode.key}
+              onPress={() => onNew(mode.key)}
+              style={({ pressed }) => [
+                styles.modeTile,
+                pressed && styles.modeTilePressed,
+              ]}
+            >
+              <Text style={styles.modeMark}>{mode.mark}</Text>
+              <Text style={styles.modeTitle}>{mode.title}</Text>
+              <Text style={styles.modeDetail}>{mode.detail}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.dashboardSection}>
+          <Text style={styles.h2}>Your journal</Text>
+          <Text style={styles.caption}>
+            {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+          </Text>
+        </View>
+        <View style={styles.compactFilters}>
+          <TextInput
+            accessibilityLabel="Search journal"
+            placeholder="Search"
+            value={search}
+            onChangeText={setSearch}
+            style={[styles.input, styles.search]}
+          />
+          <TextInput
+            accessibilityLabel="Filter by date"
+            placeholder="YYYY-MM-DD"
+            value={date}
+            onChangeText={setDate}
+            style={[styles.input, styles.dateInput]}
+          />
+        </View>
         {samples && (
           <Text style={styles.sampleBadge}>
             SAMPLE CONTENT · never mixed with your vault
@@ -112,57 +213,62 @@ export function JournalScreen({
             detail="Write more than one entry a day, choose its journal date, or dictate locally when words arrive faster than typing."
           />
         ) : (
-          values.map(entry => (
-            <Pressable
-              key={entry.id}
-              onPress={() =>
-                samples
-                  ? Alert.alert(
-                      'Sample content',
-                      'Turn off sample mode before editing.',
-                    )
-                  : onOpen(entry)
-              }
-              style={styles.card}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.cardDate}>{entry.journalDate}</Text>
-                <StatePill value={entry.analysisState} />
-              </View>
-              <Text style={styles.cardTitle}>
-                {entry.title || 'Untitled entry'}
-              </Text>
-              <Text numberOfLines={3} style={styles.cardBody}>
-                {entry.body}
-              </Text>
-              {entry.tags.length > 0 && (
-                <Text style={styles.tags}>
-                  {entry.tags.map(tag => `#${tag}`).join('  ')}
-                </Text>
-              )}
-            </Pressable>
+          groups.map(([groupDate, groupEntries]) => (
+            <View key={groupDate} style={styles.timelineGroup}>
+              <Text style={styles.timelineDate}>{groupDate}</Text>
+              {groupEntries.map(entry => {
+                const mode = journalMode(entry.mode);
+                return (
+                  <Pressable
+                    key={entry.id}
+                    onPress={() =>
+                      samples
+                        ? Alert.alert(
+                            'Sample content',
+                            'Turn off sample mode before editing.',
+                          )
+                        : onOpen(entry)
+                    }
+                    style={({ pressed }) => [
+                      styles.timelineRow,
+                      pressed && styles.timelineRowPressed,
+                    ]}
+                  >
+                    <View style={styles.timelineMark}>
+                      <Text style={styles.timelineMarkText}>{mode.mark}</Text>
+                    </View>
+                    <View style={styles.timelineContent}>
+                      <View style={styles.timelineTitleRow}>
+                        <Text numberOfLines={1} style={styles.timelineTitle}>
+                          {entry.title || mode.title}
+                        </Text>
+                        <StatePill value={entry.analysisState} />
+                      </View>
+                      <Text numberOfLines={2} style={styles.timelineExcerpt}>
+                        {entry.body}
+                      </Text>
+                      <Text style={styles.timelineMode}>{mode.title}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           ))
         )}
       </SafeScrollView>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="New journal entry"
-        onPress={onNew}
-        style={styles.fab}
-      >
-        <Text style={styles.fabText}>＋</Text>
-      </Pressable>
     </ScreenContainer>
   );
 }
 
 export function EditorScreen({
   initial,
+  initialMode = 'free',
   settings,
   onClose,
   onSaved,
 }: {
   initial?: JournalEntry;
+  initialMode?: JournalMode;
   settings: VaultSettings;
   onClose: () => void;
   onSaved: () => void;
@@ -171,13 +277,14 @@ export function EditorScreen({
   const [body, setBody] = useState(initial?.body || '');
   const [date, setDate] = useState(initial?.journalDate || localDate());
   const [tags, setTags] = useState(initial?.tags.join(', ') || '');
+  const [mode, setMode] = useState<JournalMode>(initial?.mode || initialMode);
   const [listening, setListening] = useState(false);
   const [partial, setPartial] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Encrypted draft');
   const base = useRef('');
   const committed = useRef<string[]>([]);
-  const draftId = initial?.id || 'current';
+  const draftId = initial?.id || `current_${initialMode}`;
   useEffect(() => {
     if (initial) return;
     Vault.get<JournalEntry>('draft', 'current').then(draft => {
@@ -186,10 +293,11 @@ export function EditorScreen({
         setBody(draft.body);
         setDate(draft.journalDate);
         setTags(draft.tags.join(', '));
+        setMode(draft.mode || initialMode);
         setStatus('Recovered encrypted draft');
       }
     });
-  }, [initial]);
+  }, [initial, initialMode]);
   useEffect(() => {
     const timer = setTimeout(() => {
       const now = new Date().toISOString();
@@ -202,6 +310,7 @@ export function EditorScreen({
         updatedAt: now,
         title,
         body,
+        mode,
         inputSource: 'typed',
         tags: parseTags(tags),
         analysisState: 'not-requested',
@@ -213,7 +322,7 @@ export function EditorScreen({
           .catch(() => setStatus('Draft save failed — keep this screen open'));
     }, 700);
     return () => clearTimeout(timer);
-  }, [body, title, date, tags, draftId, initial]);
+  }, [body, title, date, tags, mode, draftId, initial]);
   useEffect(() => {
     const subs = [
       VoskEvents.addListener('VoskPartial', (raw: Object) => {
@@ -277,7 +386,7 @@ export function EditorScreen({
       setStatus(errorMessage(reason));
     }
   };
-  const save = async (analyze: boolean) => {
+  const save = async () => {
     if (!body.trim())
       return Alert.alert(
         'Nothing to save',
@@ -287,11 +396,6 @@ export function EditorScreen({
       return Alert.alert(
         'Entry is too long',
         'This entry exceeds 100,000 characters. Split it before analysis; the draft has not been discarded.',
-      );
-    if (analyze && !settings.analysisConsent)
-      return Alert.alert(
-        'Text analysis is off',
-        'Enable optional text analysis in Settings first. Saving without analysis is always available.',
       );
     setBusy(true);
     const now = new Date().toISOString();
@@ -304,13 +408,14 @@ export function EditorScreen({
       updatedAt: now,
       title: title.trim(),
       body,
+      mode,
       tags: parseTags(tags),
       inputSource: committed.current.length
         ? base.current
           ? 'mixed'
           : 'dictated'
         : initial?.inputSource || 'typed',
-      analysisState: analyze ? 'pending' : 'not-requested',
+      analysisState: settings.analysisConsent ? 'pending' : 'not-requested',
     };
     try {
       if (initial) {
@@ -319,45 +424,40 @@ export function EditorScreen({
       }
       await Vault.put('entry', entry);
       await Vault.delete('draft', draftId);
-      if (analyze) {
-        setStatus('Saved. Sending reviewed text for optional analysis…');
-        try {
-          await analyzeEntry(entry);
-          entry.analysisState = 'complete';
-        } catch (reason) {
-          entry.analysisState = 'failed';
-          Alert.alert('Saved, analysis unavailable', errorMessage(reason));
-        }
-        await Vault.put('entry', entry);
-      }
+      if (settings.analysisConsent) await queueEntryAnalysis(entry);
       onSaved();
+      if (settings.analysisConsent) void retryPendingAnalysisJobs();
     } catch (reason) {
       setBusy(false);
       Alert.alert('Save failed', errorMessage(reason));
     }
   };
-  const automaticAnalysis =
-    settings.analysisConsent && settings.automaticAnalysis;
+  const modeDetails = journalMode(mode);
   return (
     <ScreenContainer>
       <KeyboardSafeScreen>
-        <Header title={initial ? 'Edit entry' : 'New entry'} onBack={onClose} />
+        <Header
+          title={initial ? 'Edit entry' : modeDetails.title}
+          onBack={onClose}
+        />
         <SafeScrollView>
+          <View style={styles.editorMode}>
+            <Text style={styles.modeMark}>{modeDetails.mark}</Text>
+            <View style={styles.mainFlex}>
+              <Text style={styles.modeTitle}>{modeDetails.title}</Text>
+              <Text style={styles.modeDetail}>{modeDetails.detail}</Text>
+            </View>
+          </View>
           <Field
             label="Title (optional)"
             value={title}
             onChangeText={setTitle}
           />
-          <Field label="Journal date" value={date} onChangeText={setDate} />
-          <Field
-            label="Tags, separated by commas"
-            value={tags}
-            onChangeText={setTags}
-          />
           <Text style={styles.label}>Your entry</Text>
           <TextInput
             accessibilityLabel="Journal entry"
             multiline
+            placeholder={modeDetails.prompt}
             textAlignVertical="top"
             value={body}
             onChangeText={value => {
@@ -392,24 +492,10 @@ export function EditorScreen({
           <Text style={styles.caption}>{status}</Text>
           <View style={styles.divider} />
           <Button
-            label={
-              busy
-                ? 'Saving…'
-                : automaticAnalysis
-                ? 'Save and analyze text'
-                : 'Save only'
-            }
+            label={busy ? 'Saving…' : 'Save entry'}
             disabled={busy || listening}
-            onPress={() => save(automaticAnalysis)}
+            onPress={save}
           />
-          {settings.analysisConsent && (
-            <Button
-              secondary
-              label={automaticAnalysis ? 'Save only' : 'Save and analyze text'}
-              disabled={busy || listening}
-              onPress={() => save(!automaticAnalysis)}
-            />
-          )}
         </SafeScrollView>
       </KeyboardSafeScreen>
     </ScreenContainer>
@@ -461,12 +547,17 @@ export function EntryScreen({
   const reanalyze = async () => {
     setBusy(true);
     try {
-      await analyzeEntry(entry);
-      entry.analysisState = 'complete';
-      await Vault.put('entry', entry);
-      setEntry({ ...entry });
+      const queued = { ...entry, analysisState: 'pending' as const };
+      await Vault.put('entry', queued);
+      await queueEntryAnalysis(queued, true);
+      setEntry(queued);
+      void retryPendingAnalysisJobs();
+      Alert.alert(
+        'Insight refresh queued',
+        'You can keep using Innerfolio. Analysis will continue automatically when the server is available.',
+      );
     } catch (reason) {
-      Alert.alert('Analysis unavailable', errorMessage(reason));
+      Alert.alert('Could not queue analysis', errorMessage(reason));
     } finally {
       setBusy(false);
     }
@@ -512,7 +603,7 @@ export function EntryScreen({
         <Button
           secondary
           disabled={busy}
-          label={busy ? 'Analyzing…' : 'Analyze / reanalyze text'}
+          label={busy ? 'Queuing…' : 'Refresh insights'}
           onPress={reanalyze}
         />
         <Text style={styles.h2}>Extracted suggestions</Text>

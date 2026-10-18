@@ -2,7 +2,7 @@
 
 Last updated: October 18, 2026
 
-Innerfolio is an account-free Android journal published by Old Alex Hub. This document describes the implemented app and server behavior. A publisher privacy contact must be added before public release.
+Innerfolio is an account-free Android journal published by Old Alex Hub. This policy explains how the app and its supporting service handle information.
 
 ## Information kept on the phone
 
@@ -14,9 +14,9 @@ The vault uses a random key protected by the password. Innerfolio does not store
 
 Microphone access is requested only when Dictate is tapped. English recognition runs on the device with a bundled Vosk model and works without internet after installation. Microphone PCM is processed in bounded memory buffers. Innerfolio does not create recordings, audio attachments, waveform files, or audio database fields, and does not upload audio. Dictation stops when cancelled, stopped, locked, left, interrupted, or backgrounded.
 
-## Optional text analysis
+## Journal insights
 
-Text analysis is off until separately enabled. When the user selects Save and analyze (or explicitly enables automatic analysis), the saved entry text and only selected context are sent over HTTPS to `https://jorunal.server.oldalexhub.com`. The server temporarily reads the text to perform non-generative processing using rules, spaCy's CPU non-transformer English pipeline, TF-IDF, NMF when data is sufficient, and extractive sentence ranking.
+Journal insights are enabled by default and can be turned off at any time in Settings. While insights are enabled, saved entry text and selected context are sent automatically over HTTPS to `https://jorunal.server.oldalexhub.com`. The server temporarily reads the text to perform non-generative processing using rules, spaCy's CPU non-transformer English pipeline, TF-IDF, NMF when data is sufficient, and extractive sentence ranking.
 
 Text inputs and results are held in bounded process memory, normally for no more than 15 minutes, and are discarded after acknowledgment, cancellation, or expiry. A restart may interrupt a job. PostgreSQL stores only hashed anonymous installation credentials, opaque identifiers, revisions, status, timestamps, durations, expiry metadata, and redacted error codes. It does not store journal text or analysis results. This is encrypted transport and temporary readable server processing—not server-blind end-to-end encryption.
 
@@ -38,4 +38,4 @@ Server operational metadata is retained only as documented by the deployed servi
 
 ## Contact
 
-Release blocker: Old Alex Hub must add a legitimate privacy contact here and to the published web policy before Google Play submission.
+For privacy questions or requests, use the developer contact published on Innerfolio's Google Play listing.

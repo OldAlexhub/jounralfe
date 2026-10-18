@@ -50,6 +50,48 @@ async function credential(): Promise<string> {
 const sleep = (ms: number) =>
   new Promise<void>(resolve => setTimeout(() => resolve(), ms));
 
+/** Persists analysis work before any network request so Save never depends on the server. */
+export async function queueEntryAnalysis(
+  entry: JournalEntry,
+  force = false,
+): Promise<AnalysisJob> {
+  const jobs = await Vault.list<AnalysisJob>('analysis_job');
+  const existing = jobs.find(
+    job =>
+      job.entryId === entry.id &&
+      job.entryRevision === entry.revision &&
+      !['completed', 'cancelled'].includes(job.status),
+  );
+  if (existing && !force) return existing;
+  if (existing && force) {
+    const refreshed: AnalysisJob = {
+      ...existing,
+      serverJobId: undefined,
+      status: 'queued',
+      retryCount: 0,
+      idempotencyKey: `${entry.id}:${entry.revision}:${newId('try')}`,
+      errorCode: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    await Vault.put('analysis_job', refreshed);
+    return refreshed;
+  }
+  const now = new Date().toISOString();
+  const queued: AnalysisJob = {
+    id: newId('job'),
+    entryId: entry.id,
+    entryRevision: entry.revision,
+    consentState: 'granted',
+    status: 'queued',
+    retryCount: 0,
+    idempotencyKey: `${entry.id}:${entry.revision}:${newId('try')}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await Vault.put('analysis_job', queued);
+  return queued;
+}
+
 async function deleteRemoteData(token: string): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE}/installation-data`, {
@@ -87,26 +129,8 @@ export async function retryPendingRemoteDeletion(): Promise<void> {
 export async function analyzeEntry(
   entry: JournalEntry,
 ): Promise<ExtractedItem[]> {
-  const pending = (await Vault.list<AnalysisJob>('analysis_job')).find(
-    job =>
-      job.entryId === entry.id &&
-      job.entryRevision === entry.revision &&
-      !['completed', 'cancelled'].includes(job.status),
-  );
-  const idempotencyKey =
-    pending?.idempotencyKey || `${entry.id}:${entry.revision}:${newId('try')}`;
-  const localJob: AnalysisJob = pending || {
-    id: newId('job'),
-    entryId: entry.id,
-    entryRevision: entry.revision,
-    consentState: 'granted',
-    status: 'queued',
-    retryCount: 0,
-    idempotencyKey,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  if (pending) localJob.retryCount += 1;
+  const localJob = await queueEntryAnalysis(entry);
+  localJob.retryCount += 1;
   localJob.status = 'queued';
   localJob.updatedAt = new Date().toISOString();
   await Vault.put('analysis_job', localJob);
@@ -116,7 +140,7 @@ export async function analyzeEntry(
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${token}`,
-      'idempotency-key': idempotencyKey,
+      'idempotency-key': localJob.idempotencyKey,
     },
     body: JSON.stringify({
       entryId: entry.id,
@@ -217,31 +241,43 @@ export async function analyzeEntry(
   localJob.status = 'completed';
   localJob.updatedAt = now;
   await Vault.put('analysis_job', localJob);
+  await Vault.put('entry', {
+    ...current,
+    analysisState: 'complete',
+    updatedAt: now,
+  });
   return items;
 }
 
 /** Retries encrypted outbox records after unlock without changing idempotency keys. */
+let retrying = false;
 export async function retryPendingAnalysisJobs(): Promise<void> {
-  const jobs = await Vault.list<AnalysisJob>('analysis_job');
-  const pending = jobs
-    .filter(value => !['completed', 'cancelled'].includes(value.status))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  for (const job of pending) {
-    const entry = await Vault.get<JournalEntry>('entry', job.entryId);
-    if (!entry || entry.revision !== job.entryRevision) {
-      await Vault.put('analysis_job', {
-        ...job,
-        status: 'cancelled',
-        errorCode: 'STALE_ENTRY_REVISION',
-        updatedAt: new Date().toISOString(),
-      });
-      continue;
+  if (retrying) return;
+  retrying = true;
+  try {
+    const jobs = await Vault.list<AnalysisJob>('analysis_job');
+    const pending = jobs
+      .filter(value => !['completed', 'cancelled'].includes(value.status))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const job of pending) {
+      const entry = await Vault.get<JournalEntry>('entry', job.entryId);
+      if (!entry || entry.revision !== job.entryRevision) {
+        await Vault.put('analysis_job', {
+          ...job,
+          status: 'cancelled',
+          errorCode: 'STALE_ENTRY_REVISION',
+          updatedAt: new Date().toISOString(),
+        });
+        continue;
+      }
+      try {
+        await analyzeEntry(entry);
+      } catch {
+        // The encrypted outbox remains available for the next unlock/retry.
+      }
     }
-    try {
-      await analyzeEntry(entry);
-    } catch {
-      // The encrypted outbox remains available for the next unlock/retry.
-    }
+  } finally {
+    retrying = false;
   }
 }
 

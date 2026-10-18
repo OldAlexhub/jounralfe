@@ -1,25 +1,51 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
-import {
-  KeyboardSafeScreen,
-  SafeScrollView,
-  ScreenContainer,
-} from '../components/layout';
-import type { ExtractedItem, Person, Topic } from '../models';
-import { newId } from '../services/text';
+import { SafeScrollView, ScreenContainer } from '../components/layout';
+import type {
+  AnalysisJob,
+  ExtractedItem,
+  JournalEntry,
+  Person,
+  Topic,
+} from '../models';
+import { Documents } from '../native';
+import { localDate, newId } from '../services/text';
 import { Vault } from '../services/vault';
 import { styles } from '../theme';
-import {
-  Button,
-  Empty,
-  EvidenceCard,
-  Field,
-  Header,
-  SmallButton,
-  parseTags,
-} from '../ui';
+import { Button, Empty, EvidenceCard, Field, Header, SmallButton } from '../ui';
 
-export function DiscoverScreen({ refresh }: { refresh: number }) {
+const insightAssist = (category: ExtractedItem['category']) => {
+  switch (category) {
+    case 'goal':
+      return 'Turn this outcome into milestones and a first next step.';
+    case 'commitment':
+      return 'Protect time for this promise or add it to a weekly focus plan.';
+    case 'decision':
+      return 'Capture the options, criteria, and review point in a decision brief.';
+    case 'idea':
+    case 'project':
+      return 'Shape this into a testable plan before investing more time.';
+    case 'constraint':
+      return 'Use this boundary to make plans more realistic.';
+    case 'question':
+      return 'Keep this visible until you have enough evidence to answer it.';
+    case 'principle':
+    case 'value':
+      return 'Use this as a filter when goals or decisions compete.';
+    default:
+      return 'Keep it if it helps you understand what matters next.';
+  }
+};
+
+export function DiscoverScreen({
+  refresh,
+  onOpenEntry,
+  onCreatePlan,
+}: {
+  refresh: number;
+  onOpenEntry: (entryId: string) => void;
+  onCreatePlan: (item: ExtractedItem) => void;
+}) {
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [filter, setFilter] = useState('all');
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -49,6 +75,13 @@ export function DiscoverScreen({ refresh }: { refresh: number }) {
   const visible = items.filter(
     item => filter === 'all' || item.category === filter,
   );
+  const actionCategories = [
+    'idea',
+    'project',
+    'goal',
+    'commitment',
+    'decision',
+  ];
   const renameTopic = async () => {
     if (!editingTopic || !topicLabel.trim()) return;
     const next: Topic = {
@@ -126,6 +159,14 @@ export function DiscoverScreen({ refresh }: { refresh: number }) {
     <ScreenContainer>
       <Header title="Discover" />
       <SafeScrollView>
+        <View style={styles.discoverHero}>
+          <Text style={styles.overline}>Your journal, working for you</Text>
+          <Text style={styles.h1}>Find the signal. Choose the next move.</Text>
+          <Text style={styles.paragraph}>
+            Innerfolio organizes useful moments from your writing and helps you
+            turn them into action.
+          </Text>
+        </View>
         <View style={styles.chips}>
           {categories.map(category => (
             <Pressable
@@ -145,8 +186,8 @@ export function DiscoverScreen({ refresh }: { refresh: number }) {
         </View>
         {visible.length === 0 ? (
           <Empty
-            title="Patterns need evidence"
-            detail="Analyze reviewed text to receive suggestions. Small journals show ordinary phrases rather than forced topics."
+            title="Your next insight starts in the journal"
+            detail="Try a Goal Review, Decision, or Idea Capture. Innerfolio will organize the useful signals after you save."
           />
         ) : (
           visible.map(item => (
@@ -157,17 +198,30 @@ export function DiscoverScreen({ refresh }: { refresh: number }) {
               </Text>
               <Text style={styles.cardTitle}>{item.label}</Text>
               <Text style={styles.quote}>“{item.evidence[0]?.quote}”</Text>
-              <Text style={styles.caption}>
-                Suggestion status: {item.state}. Inspect the source before
-                accepting.
-              </Text>
+              <Text style={styles.caption}>{insightAssist(item.category)}</Text>
               <View style={styles.row}>
                 <SmallButton
-                  label="Accept"
+                  label={
+                    ['accepted', 'corrected'].includes(item.state)
+                      ? 'Kept'
+                      : 'Keep insight'
+                  }
                   onPress={() => update(item, 'accepted')}
                 />
+                {item.evidence[0]?.entryId && (
+                  <SmallButton
+                    label="Open source"
+                    onPress={() => onOpenEntry(item.evidence[0].entryId)}
+                  />
+                )}
+                {actionCategories.includes(item.category) && (
+                  <SmallButton
+                    label="Make a plan"
+                    onPress={() => onCreatePlan(item)}
+                  />
+                )}
                 <SmallButton
-                  label="Reclassify"
+                  label="Change type"
                   onPress={() => {
                     const cycle: ExtractedItem['category'][] = [
                       'idea',
@@ -194,7 +248,7 @@ export function DiscoverScreen({ refresh }: { refresh: number }) {
                   }}
                 />
                 <SmallButton
-                  label="Dismiss"
+                  label="Not useful"
                   onPress={() => update(item, 'dismissed')}
                 />
               </View>
@@ -267,178 +321,421 @@ export function DiscoverScreen({ refresh }: { refresh: number }) {
   );
 }
 
-export function AboutScreen({ refresh }: { refresh: number }) {
+export function AboutScreen({
+  refresh,
+  onOpenEntry,
+  onCreatePlan,
+}: {
+  refresh: number;
+  onOpenEntry: (entryId: string) => void;
+  onCreatePlan: (item: ExtractedItem) => void;
+}) {
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [editing, setEditing] = useState<Person | null>(null);
-  const [name, setName] = useState('');
-  const [aliases, setAliases] = useState('');
-  const [role, setRole] = useState('');
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   useEffect(() => {
     Vault.list<ExtractedItem>('extracted_item').then(values =>
       setItems(
-        values.filter(item => ['accepted', 'corrected'].includes(item.state)),
+        values.filter(item => !['dismissed', 'withdrawn'].includes(item.state)),
       ),
     );
     Vault.list<Person>('person').then(setPeople);
+    Vault.list<JournalEntry>('entry').then(setEntries);
+    Vault.list<AnalysisJob>('analysis_job').then(values =>
+      setPendingCount(
+        values.filter(
+          value => !['completed', 'cancelled'].includes(value.status),
+        ).length,
+      ),
+    );
   }, [refresh]);
-  const clearPersonForm = () => {
-    setEditing(null);
-    setName('');
-    setAliases('');
-    setRole('');
-  };
-  const savePerson = async () => {
-    if (!name.trim())
-      return Alert.alert('Name required', 'Enter a name before saving.');
-    const now = new Date().toISOString();
-    const person: Person = {
-      id: editing?.id || newId('person'),
-      displayName: name.trim(),
-      confirmed: true,
-      confirmedAliases: parseTags(aliases),
-      confirmedRole: role.trim() || undefined,
-      pinned: editing?.pinned || false,
-      evidence: editing?.evidence || [],
-      confirmedLinks: editing?.confirmedLinks || [],
-      createdAt: editing?.createdAt || now,
-      updatedAt: now,
-    };
-    await Vault.put('person', person);
-    setPeople(values => [
-      person,
-      ...values.filter(value => value.id !== person.id),
-    ]);
-    clearPersonForm();
-  };
-  const editPerson = (person: Person) => {
-    setEditing(person);
-    setName(person.displayName);
-    setAliases(person.confirmedAliases.join(', '));
-    setRole(person.confirmedRole || '');
-  };
   const groups = ['principle', 'value', 'goal', 'desire', 'commitment'];
+  const nextMoves = items
+    .filter(item =>
+      ['goal', 'commitment', 'decision', 'idea', 'project'].includes(
+        item.category,
+      ),
+    )
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 4);
+  if (showAnalytics)
+    return (
+      <InsightAnalytics
+        entries={entries}
+        items={items}
+        people={people}
+        pendingCount={pendingCount}
+        onBack={() => setShowAnalytics(false)}
+      />
+    );
   return (
     <ScreenContainer>
-      <KeyboardSafeScreen>
-        <Header title="About Me" />
-        <SafeScrollView>
+      <Header title="About Me" />
+      <SafeScrollView>
+        <View style={styles.insightHero}>
+          <Text style={styles.overline}>Your living portrait</Text>
+          <Text style={styles.h1}>See the patterns shaping your story.</Text>
           <Text style={styles.paragraph}>
-            A reflection of statements and priorities you confirmed—not a
-            diagnosis, personality score, or claim about your inner life.
+            Innerfolio brings together the priorities, goals, relationships, and
+            themes that emerge from your journal over time.
           </Text>
-          {groups.map(group => (
-            <View key={group}>
-              <Text style={styles.h2}>
-                {group[0].toUpperCase() + group.slice(1)}s
-              </Text>
-              {items.filter(item => item.category === group).length ? (
-                items
-                  .filter(item => item.category === group)
-                  .map(item => <EvidenceCard key={item.id} item={item} />)
-              ) : (
-                <Text style={styles.caption}>No confirmed {group}s yet.</Text>
-              )}
+          <View style={styles.metricRow}>
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{entries.length}</Text>
+              <Text style={styles.metricLabel}>entries</Text>
             </View>
-          ))}
-          <Text style={styles.h2}>People</Text>
-          <Text style={styles.paragraph}>
-            Names found in analyzed text remain separate suggestions until you
-            confirm them. Matching first names are never merged automatically.
-            Mention count is evidence of recurrence, not importance.
-          </Text>
-          {people.map(person => (
-            <View key={person.id} style={styles.card}>
-              <Text style={styles.overline}>
-                {person.confirmed
-                  ? 'confirmed person'
-                  : 'unconfirmed suggestion'}
-                {person.pinned ? ' · pinned' : ''}
-              </Text>
-              <Text style={styles.cardTitle}>{person.displayName}</Text>
-              {person.confirmedRole && (
-                <Text style={styles.cardBody}>{person.confirmedRole}</Text>
-              )}
-              {person.confirmedAliases.length > 0 && (
-                <Text style={styles.tags}>
-                  Aliases: {person.confirmedAliases.join(', ')}
-                </Text>
-              )}
-              <Text style={styles.caption}>
-                {person.evidence.length} supporting passage(s)
-              </Text>
-              <View style={styles.row}>
-                <SmallButton
-                  label="Review / edit"
-                  onPress={() => editPerson(person)}
-                />
-                <SmallButton
-                  label={person.pinned ? 'Unpin' : 'Pin'}
-                  onPress={async () => {
-                    const next = {
-                      ...person,
-                      pinned: !person.pinned,
-                      updatedAt: new Date().toISOString(),
-                    };
-                    await Vault.put('person', next);
-                    setPeople(values =>
-                      values.map(value =>
-                        value.id === person.id ? next : value,
-                      ),
-                    );
-                  }}
-                />
-                <SmallButton
-                  label="Delete"
-                  onPress={() =>
-                    Alert.alert(
-                      'Delete this person?',
-                      'Journal entries remain unchanged.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Delete',
-                          style: 'destructive',
-                          onPress: async () => {
-                            await Vault.delete('person', person.id);
-                            setPeople(values =>
-                              values.filter(value => value.id !== person.id),
-                            );
-                            if (editing?.id === person.id) clearPersonForm();
-                          },
-                        },
-                      ],
-                    )
-                  }
-                />
-              </View>
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{items.length}</Text>
+              <Text style={styles.metricLabel}>insights</Text>
             </View>
-          ))}
-          <Text style={styles.h2}>
-            {editing ? 'Review person' : 'Add a person'}
-          </Text>
-          <Field label="Display name" value={name} onChangeText={setName} />
-          <Field
-            label="Confirmed aliases, separated by commas"
-            value={aliases}
-            onChangeText={setAliases}
-          />
-          <Field
-            label="Relationship / role (optional)"
-            value={role}
-            onChangeText={setRole}
-          />
-          <View style={styles.row}>
-            <Button
-              label={editing ? 'Confirm changes' : 'Add person'}
-              onPress={savePerson}
-            />
-            {editing && (
-              <Button secondary label="Cancel" onPress={clearPersonForm} />
-            )}
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{people.length}</Text>
+              <Text style={styles.metricLabel}>people</Text>
+            </View>
           </View>
-        </SafeScrollView>
-      </KeyboardSafeScreen>
+          <Button
+            label="Deepen my insights"
+            onPress={() => setShowAnalytics(true)}
+          />
+        </View>
+        {nextMoves.length > 0 && (
+          <View style={styles.actionPanel}>
+            <Text style={styles.overline}>Put insight to work</Text>
+            <Text style={styles.h2}>Next moves</Text>
+            <Text style={styles.paragraph}>
+              Turn what Innerfolio noticed into a focused plan or revisit the
+              journal moment behind it.
+            </Text>
+            {nextMoves.map(item => (
+              <View key={item.id} style={styles.actionItem}>
+                <View style={styles.mainFlex}>
+                  <Text style={styles.timelineMode}>{item.category}</Text>
+                  <Text style={styles.cardTitle}>{item.label}</Text>
+                </View>
+                <View style={styles.row}>
+                  {item.evidence[0]?.entryId && (
+                    <SmallButton
+                      label="Open source"
+                      onPress={() => onOpenEntry(item.evidence[0].entryId)}
+                    />
+                  )}
+                  <SmallButton
+                    label="Make a plan"
+                    onPress={() => onCreatePlan(item)}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+        {items.length === 0 ? (
+          <Empty
+            title="Your portrait is taking shape"
+            detail="Keep journaling. Themes, goals, commitments, and useful next moves will appear here automatically."
+          />
+        ) : (
+          <>
+            <Text style={styles.h2}>What Innerfolio noticed</Text>
+            {groups.map(group => {
+              const groupItems = items.filter(item => item.category === group);
+              if (!groupItems.length) return null;
+              return (
+                <View key={group}>
+                  <Text style={styles.insightSectionTitle}>
+                    {group[0].toUpperCase() + group.slice(1)}s
+                  </Text>
+                  {groupItems.map(item => (
+                    <EvidenceCard key={item.id} item={item} />
+                  ))}
+                </View>
+              );
+            })}
+          </>
+        )}
+        {people.length > 0 && (
+          <>
+            <Text style={styles.h2}>People in your story</Text>
+            {people.map(person => (
+              <View key={person.id} style={styles.card}>
+                <Text style={styles.overline}>
+                  {person.pinned ? 'Pinned connection' : 'From your journal'}
+                </Text>
+                <Text style={styles.cardTitle}>{person.displayName}</Text>
+                {person.confirmedRole && (
+                  <Text style={styles.cardBody}>{person.confirmedRole}</Text>
+                )}
+                {person.confirmedAliases.length > 0 && (
+                  <Text style={styles.tags}>
+                    Aliases: {person.confirmedAliases.join(', ')}
+                  </Text>
+                )}
+                <Text style={styles.caption}>
+                  {person.evidence.length} supporting passage(s)
+                </Text>
+                <View style={styles.row}>
+                  <SmallButton
+                    label={person.pinned ? 'Unpin' : 'Pin'}
+                    onPress={async () => {
+                      const next = {
+                        ...person,
+                        pinned: !person.pinned,
+                        updatedAt: new Date().toISOString(),
+                      };
+                      await Vault.put('person', next);
+                      setPeople(values =>
+                        values.map(value =>
+                          value.id === person.id ? next : value,
+                        ),
+                      );
+                    }}
+                  />
+                  <SmallButton
+                    label="Remove"
+                    onPress={() =>
+                      Alert.alert(
+                        'Remove this person?',
+                        'Your journal entries will stay unchanged.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Remove',
+                            style: 'destructive',
+                            onPress: async () => {
+                              await Vault.delete('person', person.id);
+                              setPeople(values =>
+                                values.filter(value => value.id !== person.id),
+                              );
+                            },
+                          },
+                        ],
+                      )
+                    }
+                  />
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+      </SafeScrollView>
     </ScreenContainer>
+  );
+}
+
+function InsightAnalytics({
+  entries,
+  items,
+  people,
+  pendingCount,
+  onBack,
+}: {
+  entries: JournalEntry[];
+  items: ExtractedItem[];
+  people: Person[];
+  pendingCount: number;
+  onBack: () => void;
+}) {
+  const categoryMap = new Map<string, number>();
+  items.forEach(item =>
+    categoryMap.set(item.category, (categoryMap.get(item.category) || 0) + 1),
+  );
+  const categories = Array.from(categoryMap, ([key, value]) => ({
+    key,
+    label: `${key[0].toUpperCase()}${key.slice(1)}s`,
+    value,
+  })).sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+
+  const monthMap = new Map<string, number>();
+  entries.forEach(entry => {
+    const month = entry.journalDate.slice(0, 7);
+    monthMap.set(month, (monthMap.get(month) || 0) + 1);
+  });
+  const months = Array.from(monthMap, ([key, value]) => ({
+    key,
+    label: new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      year: '2-digit',
+    }).format(new Date(`${key}-01T12:00:00`)),
+    value,
+  }))
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .slice(-6);
+
+  const analyzed = entries.filter(
+    entry => entry.analysisState === 'complete',
+  ).length;
+  const coverage = entries.length
+    ? Math.round((analyzed / entries.length) * 100)
+    : 0;
+  const wordCount = entries.reduce(
+    (total, entry) =>
+      total + (entry.body.trim() ? entry.body.trim().split(/\s+/u).length : 0),
+    0,
+  );
+  const peopleRows = [...people]
+    .sort((a, b) => b.evidence.length - a.evidence.length)
+    .slice(0, 12);
+
+  const download = () => {
+    const data = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      summary: {
+        entries: entries.length,
+        words: wordCount,
+        analyzedEntries: analyzed,
+        analysisCoveragePercent: coverage,
+        pendingAnalyses: pendingCount,
+        insights: items.length,
+        people: people.length,
+      },
+      activityByMonth: months.map(({ key, value }) => ({
+        month: key,
+        entries: value,
+      })),
+      insightCategories: categories.map(({ key, value }) => ({
+        category: key,
+        count: value,
+      })),
+      people: peopleRows.map(person => ({
+        name: person.displayName,
+        supportingPassages: person.evidence.length,
+        pinned: person.pinned,
+      })),
+    };
+    Documents.saveText(
+      `Innerfolio-insights-${localDate()}.json`,
+      'application/json',
+      JSON.stringify(data, null, 2),
+    ).catch(reason =>
+      Alert.alert(
+        'Download unavailable',
+        reason instanceof Error ? reason.message : String(reason),
+      ),
+    );
+  };
+
+  return (
+    <ScreenContainer>
+      <Header title="Deeper insights" onBack={onBack} />
+      <SafeScrollView>
+        <Text style={styles.lead}>
+          A clear view of your journaling rhythm, recurring themes, and the
+          connections already found in your writing.
+        </Text>
+
+        <View style={styles.metricRow}>
+          <View style={styles.metric}>
+            <Text style={styles.metricValue}>{entries.length}</Text>
+            <Text style={styles.metricLabel}>entries</Text>
+          </View>
+          <View style={styles.metric}>
+            <Text style={styles.metricValue}>{wordCount}</Text>
+            <Text style={styles.metricLabel}>words captured</Text>
+          </View>
+          <View style={styles.metric}>
+            <Text style={styles.metricValue}>{coverage}%</Text>
+            <Text style={styles.metricLabel}>analyzed</Text>
+          </View>
+        </View>
+
+        <InsightChart
+          title="Journal activity"
+          detail="Entries written over the last six active months"
+          rows={months}
+          empty="Your activity chart will grow as you journal."
+        />
+        <InsightChart
+          title="Insight map"
+          detail="The ideas and intentions appearing in your writing"
+          rows={categories}
+          empty="Insights will appear after your first analyzed entries."
+        />
+
+        <View style={styles.chartCard}>
+          <Text style={styles.h2}>People in your story</Text>
+          <Text style={styles.caption}>
+            Supporting passages show recurrence, not importance.
+          </Text>
+          <View style={styles.tableHeader}>
+            <Text style={styles.tableHeaderText}>Person</Text>
+            <Text style={styles.tableHeaderText}>Passages</Text>
+          </View>
+          {peopleRows.length ? (
+            peopleRows.map(person => (
+              <View key={person.id} style={styles.tableRow}>
+                <Text numberOfLines={1} style={styles.tableLabel}>
+                  {person.displayName}
+                </Text>
+                <Text style={styles.tableValue}>{person.evidence.length}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.chartEmpty}>
+              People will appear as they are found in your journal.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.chartCard}>
+          <Text style={styles.h2}>Analysis coverage</Text>
+          <View style={styles.tableRow}>
+            <Text style={styles.tableLabel}>Ready</Text>
+            <Text style={styles.tableValue}>{analyzed}</Text>
+          </View>
+          <View style={styles.tableRow}>
+            <Text style={styles.tableLabel}>Updating</Text>
+            <Text style={styles.tableValue}>{pendingCount}</Text>
+          </View>
+          <View style={styles.tableRow}>
+            <Text style={styles.tableLabel}>Total entries</Text>
+            <Text style={styles.tableValue}>{entries.length}</Text>
+          </View>
+        </View>
+
+        <Button label="Download insight data" onPress={download} />
+      </SafeScrollView>
+    </ScreenContainer>
+  );
+}
+
+function InsightChart({
+  title,
+  detail,
+  rows,
+  empty,
+}: {
+  title: string;
+  detail: string;
+  rows: Array<{ key: string; label: string; value: number }>;
+  empty: string;
+}) {
+  const max = Math.max(1, ...rows.map(row => row.value));
+  return (
+    <View style={styles.chartCard}>
+      <Text style={styles.h2}>{title}</Text>
+      <Text style={styles.caption}>{detail}</Text>
+      {rows.length ? (
+        rows.map(row => (
+          <View key={row.key} style={styles.barRow}>
+            <View style={styles.barLabelRow}>
+              <Text style={styles.tableLabel}>{row.label}</Text>
+              <Text style={styles.tableValue}>{row.value}</Text>
+            </View>
+            <View style={styles.barTrack}>
+              <View
+                style={[
+                  styles.barFill,
+                  { width: `${Math.max(5, (row.value / max) * 100)}%` },
+                ]}
+              />
+            </View>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.chartEmpty}>{empty}</Text>
+      )}
+    </View>
   );
 }

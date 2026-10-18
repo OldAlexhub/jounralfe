@@ -1,5 +1,6 @@
 export type ISODateTime = string;
 export type InputSource = 'typed' | 'dictated' | 'mixed';
+export type JournalMode = 'free' | 'check-in' | 'goal' | 'decision' | 'idea';
 export type ReviewState =
   | 'suggested'
   | 'accepted'
@@ -43,6 +44,7 @@ export interface JournalEntry {
   updatedAt: ISODateTime;
   title: string;
   body: string;
+  mode?: JournalMode;
   inputSource: InputSource;
   tags: string[];
   analysisState: 'not-requested' | 'pending' | 'complete' | 'failed' | 'stale';
