@@ -32,7 +32,10 @@ local.properties
 *.hprof
 .cxx/
 *.keystore
+*.jks
 !debug.keystore
+android/signing.properties
+android/keystore/
 .kotlin/
 
 # node.js

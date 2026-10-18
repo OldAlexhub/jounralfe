@@ -1,4 +1,8 @@
 {
-  "name": "personalJournal",
-  "displayName": "personalJournal"
+  "name": "Innerfolio",
+  "displayName": "Innerfolio",
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-7831002909037560~3624086557",
+    "delay_app_measurement_init": true
+  }
 }

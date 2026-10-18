@@ -1,97 +1,55 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Innerfolio: Journal & Plans
 
-# Getting Started
+Innerfolio is an Android-only, account-free journal with an encrypted local vault, offline English dictation, reviewable conventional text analysis, and deterministic plan templates. The public API origin is exactly `https://jorunal.server.oldalexhub.com/api/v1`.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Privacy and product boundaries
 
-## Step 1: Start Metro
+- Journal entries, drafts, extracted passages, people, topics, observations, plans, analysis outbox records, and search data live in a SQLCipher database on the phone.
+- A random 256-bit vault key is wrapped with a password-derived AES-256-GCM key. PBKDF2-HMAC-SHA256 uses a random salt and versioned 600,000-iteration parameters. The password is not stored or transmitted.
+- Optional biometric unlock rewraps the same random vault key with an authentication-bound Android Keystore key. Biometric invalidation never removes password unlock.
+- Passwords cannot be reset by the server. Without the password, a still-valid biometric unlock, or a valid encrypted backup, the journal cannot be recovered.
+- Dictation uses the bundled `vosk-model-small-en-us-0.15` locally. Audio is held only in bounded microphone buffers, is never written to a file, and is never sent to a server.
+- Optional analysis sends reviewed text—not voice—over HTTPS after separate consent. The server runs a CPU non-transformer pipeline and keeps input/result payloads in bounded process memory for a default maximum of 15 minutes.
+- Plans are assembled from user-selected evidence, user answers, accepted assumptions, unanswered questions, and publisher-authored guidance. The app does not generate prose or invent missing facts.
+- Google Mobile Ads and UMP appear only on substantial publisher-authored template/guidance screens. Private journal, editor, Discover, About Me, plan editor, onboarding, unlock, settings, privacy, and destructive flows contain no ads.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Local development
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+Requirements: Node.js 22.11+, Android Studio with API 37 build tools and Android 16/API 36 platform, and the included Gradle wrapper.
 
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
+```powershell
+cd personalJournal
+npm ci
+powershell -ExecutionPolicy Bypass -File scripts/install-vosk-model.ps1
+npm test -- --runInBand
+npx tsc --noEmit
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
+The model installer downloads the Apache-2.0 English model and refuses a SHA-256 mismatch. The checked-in release workspace already includes the verified model. English is the only advertised dictation and analysis language. Unicode Arabic typing and bidirectional rendering are supported, but Arabic dictation/NLP parity is not claimed.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## Release
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+From the repository root:
 
-```sh
-bundle install
+```powershell
+python release.py --check-env
+python release.py --generate-key-only
+python release.py
+python release.py --no-clean --skip-screenshots
 ```
 
-Then, and every time you update your native dependencies, run:
+`release.py` discovers Android Studio's JBR and the SDK, updates only process-local environment variables, preserves unrelated `local.properties` keys, configures signing without printing passwords, builds a signed APK/AAB, checks 64-bit native ELF alignment for 16 KB pages, packages the server, and copies release materials. The AAB is the Google Play upload artifact.
 
-```sh
-bundle exec pod install
-```
+Signing files are ignored. Securely back up both `android/keystore/innerfolio-release.jks` and `android/signing.properties` separately. If this is an update to an established Play listing, do not generate a replacement key; recover the established identity.
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+Troubleshooting:
 
-```sh
-# Using npm
-npm run ios
+- Run `python release.py --check-env` for `ANDROID_HOME`, SDK, JDK, keytool, adb, Gradle wrapper, platform, build-tools, `local.properties`, or `sdk.dir` problems.
+- For navigation overlap, inspect `src/components/layout.tsx`, the single inset owner in `SafeBottomBar`, normal-flow ad footer, scroll padding, and `adjustResize` in `AndroidManifest.xml`.
+- If dictation is unavailable, rerun the model installer and grant microphone permission only after tapping Dictate.
+- A failed or no-fill ad never blocks guidance content.
 
-# OR using Yarn
-yarn ios
-```
+## Verification limits
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+Automated TypeScript/Jest and Android compilation checks are provided. Airplane-mode dictation, biometric enrollment changes, actual reminders, PDF appearance on device, gesture/three-button navigation, cutouts, Bluetooth changes, 16 KB emulator runtime, and AdMob delivery require real device/emulator validation before release. The AdMob console must contain the appropriate privacy message. The publisher must also supply a legitimate privacy contact before publication.

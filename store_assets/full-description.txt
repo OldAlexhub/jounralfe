@@ -1,0 +1,15 @@
+Innerfolio is a private journal and practical planning space for Android.
+
+Write more than one entry a day, choose the date that belongs to it, add tags, and search your encrypted journal offline. When typing is inconvenient, dictate in English with speech recognition that runs entirely on your phone. Innerfolio keeps editable text and does not save or upload voice recordings.
+
+Your journal is protected by a password-backed encrypted vault. Optional biometric unlock uses Android’s secure hardware path when available. There is no consumer account, email registration, subscription, paid unlock, or cloud synchronization. If you lose your password and do not have a valid biometric unlock or encrypted backup, the journal cannot be recovered.
+
+Optional text analysis can propose ideas, goals, commitments, decisions, people, recurring phrases, and extractive summaries. It uses conventional, non-generative language processing. You review every suggestion, inspect its original passage, and decide what to accept, correct, reclassify, or dismiss. English analysis is supported; Arabic and other Unicode text can be written and displayed, but equal analysis or dictation support is not claimed.
+
+Build editable business, personal 90-day, learning, decision, weekly focus, and launch plans. Innerfolio maps only information you select, answers you write, assumptions you explicitly accept, and publisher-authored guidance. Missing facts remain questions. It does not invent market demand, budgets, revenue, or personal intentions.
+
+Export individual entries, structured JSON, plans as Markdown or PDF, and complete encrypted backups using Android’s document picker. Optional reminders stay on the phone and use generic wording.
+
+The app is free and supported by restrained banner and native advertising on public template-guidance screens only. Ads never appear beside private journal entries, dictation, personal insights, or plan editing. Google’s consent tools manage advertising choices where required.
+
+Innerfolio is for reflection and organization. It does not diagnose mental health, produce personality scores, or promise perfect understanding.

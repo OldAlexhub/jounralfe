@@ -59,6 +59,12 @@ react {
  */
 def enableProguardInReleaseBuilds = false
 
+def signingProperties = new Properties()
+def signingPropertiesFile = rootProject.file("signing.properties")
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
@@ -77,9 +83,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.personaljournal"
+    namespace "com.oldalexhub.innerfolio"
     defaultConfig {
-        applicationId "com.personaljournal"
+        applicationId "com.oldalexhub.innerfolio"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -92,24 +98,43 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (signingPropertiesFile.exists()) {
+            release {
+                storeFile rootProject.file(signingProperties['storeFile'])
+                storePassword signingProperties['storePassword']
+                keyAlias signingProperties['keyAlias']
+                keyPassword signingProperties['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (signingPropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         }
+    }
+    packagingOptions {
+        jniLibs { useLegacyPackaging = false }
     }
 }
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation("net.zetetic:sqlcipher-android:4.19.1@aar")
+    implementation("androidx.sqlite:sqlite:2.7.0")
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("com.alphacephei:vosk-android:0.3.75") {
+        exclude group: "net.java.dev.jna", module: "jna"
+    }
+    implementation("net.java.dev.jna:jna:5.19.1@aar")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

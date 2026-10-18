@@ -8,3 +8,8 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+# SQLCipher, Vosk/JNA, and React Native bridges.
+-keep class net.zetetic.database.sqlcipher.** { *; }
+-keep class org.vosk.** { *; }
+-keep class com.sun.jna.** { *; }
+-dontwarn com.sun.jna.**

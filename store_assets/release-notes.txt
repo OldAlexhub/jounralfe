@@ -1,0 +1,8 @@
+Welcome to Innerfolio 1.0.
+
+• Password-protected encrypted journal
+• Offline, on-device English dictation with no saved audio
+• Optional reviewable text analysis using conventional NLP
+• Six deterministic, editable plan templates
+• Local Markdown, JSON, PDF, and encrypted-backup exports
+• Safe layouts for Android system navigation and keyboard insets
