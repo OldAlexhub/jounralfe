@@ -12,7 +12,9 @@ class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    if (!BuildConfig.DEBUG) {
+      window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
   }
 
   override fun createReactActivityDelegate(): ReactActivityDelegate =

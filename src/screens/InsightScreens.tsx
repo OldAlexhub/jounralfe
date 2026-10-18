@@ -37,12 +37,109 @@ const insightAssist = (category: ExtractedItem['category']) => {
   }
 };
 
+const sampleNotice = () =>
+  Alert.alert(
+    'Sample content',
+    'Turn off sample mode before changing insights or creating plans.',
+  );
+
+const SAMPLE_ENTRY: JournalEntry = {
+  id: 'sample-entry',
+  revision: 1,
+  journalDate: '2026-10-18',
+  timezone: 'America/New_York',
+  createdAt: '2026-10-18T13:00:00Z',
+  updatedAt: '2026-10-18T13:00:00Z',
+  title: 'A calmer launch plan',
+  body: 'I want to test the workshop idea with five conversations before choosing a venue. I value leaving room for family evenings. Maya offered to help me shape the first questions.',
+  mode: 'goal',
+  inputSource: 'typed',
+  tags: ['sample', 'planning'],
+  analysisState: 'complete',
+};
+
+const sampleEvidence = (quote: string) => ({
+  entryId: SAMPLE_ENTRY.id,
+  entryRevision: 1,
+  quote,
+  start: SAMPLE_ENTRY.body.indexOf(quote),
+  end: SAMPLE_ENTRY.body.indexOf(quote) + quote.length,
+  offsetConvention: 'utf16-code-unit' as const,
+  contentHash: 'sample-content',
+  extractionVersion: 'sample-v1',
+});
+
+const SAMPLE_ITEMS: ExtractedItem[] = [
+  {
+    id: 'sample-goal',
+    category: 'goal',
+    originalWording: 'test the workshop idea with five conversations',
+    label: 'Test the workshop idea with five conversations',
+    subject: null,
+    temporal: {},
+    modality: 'stated',
+    negated: false,
+    evidence: [
+      sampleEvidence(
+        'test the workshop idea with five conversations before choosing a venue',
+      ),
+    ],
+    state: 'accepted',
+    createdAt: '2026-10-18T13:00:00Z',
+    updatedAt: '2026-10-18T13:00:00Z',
+  },
+  {
+    id: 'sample-value',
+    category: 'value',
+    originalWording: 'leaving room for family evenings',
+    label: 'Protect time for family evenings',
+    subject: null,
+    temporal: {},
+    modality: 'stated',
+    negated: false,
+    evidence: [sampleEvidence('leaving room for family evenings')],
+    state: 'accepted',
+    createdAt: '2026-10-18T13:00:00Z',
+    updatedAt: '2026-10-18T13:00:00Z',
+  },
+];
+
+const SAMPLE_TOPICS: Topic[] = [
+  {
+    id: 'sample-topic',
+    label: 'Thoughtful experiments',
+    terms: ['workshop', 'conversations', 'test'],
+    linkedEntryIds: [SAMPLE_ENTRY.id],
+    method: 'phrase-groups',
+    version: 'sample-v1',
+    history: [],
+    updatedAt: '2026-10-18T13:00:00Z',
+  },
+];
+
+const SAMPLE_PEOPLE: Person[] = [
+  {
+    id: 'sample-person',
+    displayName: 'Maya',
+    confirmed: true,
+    confirmedAliases: [],
+    confirmedRole: 'Creative collaborator',
+    pinned: true,
+    evidence: [sampleEvidence('Maya')],
+    confirmedLinks: [],
+    createdAt: '2026-10-18T13:00:00Z',
+    updatedAt: '2026-10-18T13:00:00Z',
+  },
+];
+
 export function DiscoverScreen({
   refresh,
+  sampleMode,
   onOpenEntry,
   onCreatePlan,
 }: {
   refresh: number;
+  sampleMode: boolean;
   onOpenEntry: (entryId: string) => void;
   onCreatePlan: (item: ExtractedItem) => void;
 }) {
@@ -57,6 +154,7 @@ export function DiscoverScreen({
     Vault.list<Topic>('topic').then(setTopics);
   }, [refresh]);
   const update = async (item: ExtractedItem, state: ExtractedItem['state']) => {
+    if (item.id.startsWith('sample-')) return sampleNotice();
     const next = { ...item, state, updatedAt: new Date().toISOString() };
     await Vault.put('extracted_item', next);
     setItems(values =>
@@ -72,7 +170,10 @@ export function DiscoverScreen({
     'principle',
     'constraint',
   ];
-  const visible = items.filter(
+  const samples = sampleMode && items.length === 0 && topics.length === 0;
+  const availableItems = samples ? SAMPLE_ITEMS : items;
+  const availableTopics = samples ? SAMPLE_TOPICS : topics;
+  const visible = availableItems.filter(
     item => filter === 'all' || item.category === filter,
   );
   const actionCategories = [
@@ -84,6 +185,7 @@ export function DiscoverScreen({
   ];
   const renameTopic = async () => {
     if (!editingTopic || !topicLabel.trim()) return;
+    if (editingTopic.id.startsWith('sample-')) return sampleNotice();
     const next: Topic = {
       ...editingTopic,
       label: topicLabel.trim(),
@@ -105,6 +207,7 @@ export function DiscoverScreen({
     setTopicLabel('');
   };
   const mergeTopic = async (topic: Topic) => {
+    if (topic.id.startsWith('sample-')) return sampleNotice();
     if (!mergeSource) return setMergeSource(topic);
     if (mergeSource.id === topic.id) return setMergeSource(null);
     const now = new Date().toISOString();
@@ -131,6 +234,7 @@ export function DiscoverScreen({
     setMergeSource(null);
   };
   const splitTopic = async (topic: Topic) => {
+    if (topic.id.startsWith('sample-')) return sampleNotice();
     if (topic.terms.length < 2)
       return Alert.alert(
         'Nothing to split',
@@ -167,6 +271,11 @@ export function DiscoverScreen({
             turn them into action.
           </Text>
         </View>
+        {samples && (
+          <Text style={styles.sampleBadge}>
+            SAMPLE CONTENT · never mixed with your vault
+          </Text>
+        )}
         <View style={styles.chips}>
           {categories.map(category => (
             <Pressable
@@ -211,18 +320,27 @@ export function DiscoverScreen({
                 {item.evidence[0]?.entryId && (
                   <SmallButton
                     label="Open source"
-                    onPress={() => onOpenEntry(item.evidence[0].entryId)}
+                    onPress={() =>
+                      item.id.startsWith('sample-')
+                        ? sampleNotice()
+                        : onOpenEntry(item.evidence[0].entryId)
+                    }
                   />
                 )}
                 {actionCategories.includes(item.category) && (
                   <SmallButton
                     label="Make a plan"
-                    onPress={() => onCreatePlan(item)}
+                    onPress={() =>
+                      item.id.startsWith('sample-')
+                        ? sampleNotice()
+                        : onCreatePlan(item)
+                    }
                   />
                 )}
                 <SmallButton
                   label="Change type"
                   onPress={() => {
+                    if (item.id.startsWith('sample-')) return sampleNotice();
                     const cycle: ExtractedItem['category'][] = [
                       'idea',
                       'goal',
@@ -266,7 +384,7 @@ export function DiscoverScreen({
             {mergeSource.label}”.
           </Text>
         )}
-        {topics.map(topic => (
+        {availableTopics.map(topic => (
           <View key={topic.id} style={styles.card}>
             <Text style={styles.overline}>{topic.method}</Text>
             <Text style={styles.cardTitle}>{topic.label}</Text>
@@ -290,6 +408,7 @@ export function DiscoverScreen({
               <SmallButton
                 label="Dismiss"
                 onPress={async () => {
+                  if (topic.id.startsWith('sample-')) return sampleNotice();
                   await Vault.delete('topic', topic.id);
                   setTopics(values =>
                     values.filter(value => value.id !== topic.id),
@@ -323,10 +442,12 @@ export function DiscoverScreen({
 
 export function AboutScreen({
   refresh,
+  sampleMode,
   onOpenEntry,
   onCreatePlan,
 }: {
   refresh: number;
+  sampleMode: boolean;
   onOpenEntry: (entryId: string) => void;
   onCreatePlan: (item: ExtractedItem) => void;
 }) {
@@ -352,7 +473,15 @@ export function AboutScreen({
     );
   }, [refresh]);
   const groups = ['principle', 'value', 'goal', 'desire', 'commitment'];
-  const nextMoves = items
+  const samples =
+    sampleMode &&
+    items.length === 0 &&
+    people.length === 0 &&
+    entries.length === 0;
+  const availableItems = samples ? SAMPLE_ITEMS : items;
+  const availablePeople = samples ? SAMPLE_PEOPLE : people;
+  const availableEntries = samples ? [SAMPLE_ENTRY] : entries;
+  const nextMoves = availableItems
     .filter(item =>
       ['goal', 'commitment', 'decision', 'idea', 'project'].includes(
         item.category,
@@ -363,10 +492,11 @@ export function AboutScreen({
   if (showAnalytics)
     return (
       <InsightAnalytics
-        entries={entries}
-        items={items}
-        people={people}
+        entries={availableEntries}
+        items={availableItems}
+        people={availablePeople}
         pendingCount={pendingCount}
+        sampleMode={samples}
         onBack={() => setShowAnalytics(false)}
       />
     );
@@ -383,15 +513,15 @@ export function AboutScreen({
           </Text>
           <View style={styles.metricRow}>
             <View style={styles.metric}>
-              <Text style={styles.metricValue}>{entries.length}</Text>
+              <Text style={styles.metricValue}>{availableEntries.length}</Text>
               <Text style={styles.metricLabel}>entries</Text>
             </View>
             <View style={styles.metric}>
-              <Text style={styles.metricValue}>{items.length}</Text>
+              <Text style={styles.metricValue}>{availableItems.length}</Text>
               <Text style={styles.metricLabel}>insights</Text>
             </View>
             <View style={styles.metric}>
-              <Text style={styles.metricValue}>{people.length}</Text>
+              <Text style={styles.metricValue}>{availablePeople.length}</Text>
               <Text style={styles.metricLabel}>people</Text>
             </View>
           </View>
@@ -400,6 +530,11 @@ export function AboutScreen({
             onPress={() => setShowAnalytics(true)}
           />
         </View>
+        {samples && (
+          <Text style={styles.sampleBadge}>
+            SAMPLE CONTENT · never mixed with your vault
+          </Text>
+        )}
         {nextMoves.length > 0 && (
           <View style={styles.actionPanel}>
             <Text style={styles.overline}>Put insight to work</Text>
@@ -418,19 +553,27 @@ export function AboutScreen({
                   {item.evidence[0]?.entryId && (
                     <SmallButton
                       label="Open source"
-                      onPress={() => onOpenEntry(item.evidence[0].entryId)}
+                      onPress={() =>
+                        item.id.startsWith('sample-')
+                          ? sampleNotice()
+                          : onOpenEntry(item.evidence[0].entryId)
+                      }
                     />
                   )}
                   <SmallButton
                     label="Make a plan"
-                    onPress={() => onCreatePlan(item)}
+                    onPress={() =>
+                      item.id.startsWith('sample-')
+                        ? sampleNotice()
+                        : onCreatePlan(item)
+                    }
                   />
                 </View>
               </View>
             ))}
           </View>
         )}
-        {items.length === 0 ? (
+        {availableItems.length === 0 ? (
           <Empty
             title="Your portrait is taking shape"
             detail="Keep journaling. Themes, goals, commitments, and useful next moves will appear here automatically."
@@ -439,7 +582,9 @@ export function AboutScreen({
           <>
             <Text style={styles.h2}>What Innerfolio noticed</Text>
             {groups.map(group => {
-              const groupItems = items.filter(item => item.category === group);
+              const groupItems = availableItems.filter(
+                item => item.category === group,
+              );
               if (!groupItems.length) return null;
               return (
                 <View key={group}>
@@ -454,10 +599,10 @@ export function AboutScreen({
             })}
           </>
         )}
-        {people.length > 0 && (
+        {availablePeople.length > 0 && (
           <>
             <Text style={styles.h2}>People in your story</Text>
-            {people.map(person => (
+            {availablePeople.map(person => (
               <View key={person.id} style={styles.card}>
                 <Text style={styles.overline}>
                   {person.pinned ? 'Pinned connection' : 'From your journal'}
@@ -478,6 +623,7 @@ export function AboutScreen({
                   <SmallButton
                     label={person.pinned ? 'Unpin' : 'Pin'}
                     onPress={async () => {
+                      if (person.id.startsWith('sample-')) return sampleNotice();
                       const next = {
                         ...person,
                         pinned: !person.pinned,
@@ -493,7 +639,8 @@ export function AboutScreen({
                   />
                   <SmallButton
                     label="Remove"
-                    onPress={() =>
+                    onPress={() => {
+                      if (person.id.startsWith('sample-')) return sampleNotice();
                       Alert.alert(
                         'Remove this person?',
                         'Your journal entries will stay unchanged.',
@@ -510,8 +657,8 @@ export function AboutScreen({
                             },
                           },
                         ],
-                      )
-                    }
+                      );
+                    }}
                   />
                 </View>
               </View>
@@ -528,12 +675,14 @@ function InsightAnalytics({
   items,
   people,
   pendingCount,
+  sampleMode,
   onBack,
 }: {
   entries: JournalEntry[];
   items: ExtractedItem[];
   people: Person[];
   pendingCount: number;
+  sampleMode: boolean;
   onBack: () => void;
 }) {
   const categoryMap = new Map<string, number>();
@@ -620,6 +769,11 @@ function InsightAnalytics({
     <ScreenContainer>
       <Header title="Deeper insights" onBack={onBack} />
       <SafeScrollView>
+        {sampleMode && (
+          <Text style={styles.sampleBadge}>
+            SAMPLE CONTENT · never mixed with your vault
+          </Text>
+        )}
         <Text style={styles.lead}>
           A clear view of your journaling rhythm, recurring themes, and the
           connections already found in your writing.

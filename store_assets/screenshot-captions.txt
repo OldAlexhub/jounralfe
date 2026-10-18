@@ -1,7 +1,8 @@
-1. Journal — Your encrypted daily timeline, searchable and available offline.
+1. Journal — Choose the mode that fits the moment and keep a clear daily timeline.
 2. Write — Type comfortably or dictate locally, then review every word before saving.
-3. Discover — Accept, correct, reclassify, or dismiss evidence-linked suggestions.
-4. Plans — Build practical plans without invented answers or generative text.
-5. Settings — Control locking, biometrics, analysis consent, reminders, backups, and privacy.
+3. Discover — See evidence-linked goals and values, then choose a useful next move.
+4. About Me — Turn recurring priorities and relationships into a living, useful portrait.
+5. Deeper insights — Explore journal activity and insight categories with downloadable data.
+6. Plans — Turn what matters into practical plans without invented answers.
 
 All screenshots must use the clearly marked sample-content mode. Do not capture a real journal, real names, administrator pages, credentials, or device notifications containing personal information.

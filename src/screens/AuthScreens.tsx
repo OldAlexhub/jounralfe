@@ -42,7 +42,7 @@ export function Onboarding({ onReady }: { onReady: () => void }) {
       <KeyboardSafeScreen>
         <SafeScrollView contentContainerStyle={styles.centerColumn}>
           <Image
-            source={require('../../assets/logo.png')}
+            source={require('../../assets/innerfolio-icon-v2.png')}
             style={styles.logo}
           />
           <Text style={styles.brand}>Innerfolio</Text>
@@ -134,7 +134,7 @@ export function Unlock({ onReady }: { onReady: () => void }) {
       <KeyboardSafeScreen>
         <SafeScrollView contentContainerStyle={styles.centerColumn}>
           <Image
-            source={require('../../assets/logo.png')}
+            source={require('../../assets/innerfolio-icon-v2.png')}
             style={styles.logoSmall}
           />
           <Text style={styles.h1}>Welcome back</Text>

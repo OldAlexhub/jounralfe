@@ -48,7 +48,7 @@ const SAMPLE_ENTRIES: JournalEntry[] = [
     createdAt: '2026-10-18T13:00:00Z',
     updatedAt: '2026-10-18T13:00:00Z',
     title: 'A calmer launch plan',
-    body: 'I want to test the workshop idea with five conversations before choosing a venue. I value leaving room for family evenings.',
+    body: 'I want to test the workshop idea with five conversations before choosing a venue. I value leaving room for family evenings. Maya offered to help me shape the first questions.',
     mode: 'goal',
     inputSource: 'typed',
     tags: ['sample', 'planning'],
@@ -441,6 +441,11 @@ export function EditorScreen({
           onBack={onClose}
         />
         <SafeScrollView>
+          {settings.sampleMode && (
+            <Text style={styles.sampleBadge}>
+              SAMPLE CONTENT · never mixed with your vault
+            </Text>
+          )}
           <View style={styles.editorMode}>
             <Text style={styles.modeMark}>{modeDetails.mark}</Text>
             <View style={styles.mainFlex}>

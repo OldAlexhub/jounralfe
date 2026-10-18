@@ -221,18 +221,21 @@ function MainApp({ onLock }: { onLock: () => void }) {
           ) : tab === 'discover' ? (
             <DiscoverScreen
               refresh={refresh}
+              sampleMode={settings.sampleMode}
               onOpenEntry={openEntry}
               onCreatePlan={createPlanFromInsight}
             />
           ) : tab === 'about' ? (
             <AboutScreen
               refresh={refresh}
+              sampleMode={settings.sampleMode}
               onOpenEntry={openEntry}
               onCreatePlan={createPlanFromInsight}
             />
           ) : (
             <PlansScreen
               refresh={refresh}
+              sampleMode={settings.sampleMode}
               onOpen={plan => setRoute({ name: 'plan', plan })}
               onTemplate={template => setRoute({ name: 'guidance', template })}
             />

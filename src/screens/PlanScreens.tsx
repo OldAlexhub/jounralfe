@@ -21,12 +21,59 @@ import {
   safeName,
 } from '../ui';
 
+const SAMPLE_PLAN: Plan = {
+  id: 'sample-plan',
+  templateId: 'personal-90-day',
+  templateVersion: 1,
+  title: 'Workshop conversation sprint',
+  sections: [
+    {
+      id: 'sample-section-one',
+      title: 'Desired outcome',
+      guidance: 'Describe the outcome and editable timeframe.',
+      sourceReferences: [],
+      manualAnswer: 'Learn what five potential participants need most.',
+      acceptedAssumptions: [],
+      unansweredQuestions: [],
+    },
+    {
+      id: 'sample-section-two',
+      title: 'Constraints and commitments',
+      guidance: 'Make existing demands visible.',
+      sourceReferences: [],
+      manualAnswer: 'Keep family evenings open.',
+      acceptedAssumptions: [],
+      unansweredQuestions: [],
+    },
+    {
+      id: 'sample-section-three',
+      title: 'Review',
+      guidance: 'Choose a recurring review question.',
+      sourceReferences: [],
+      manualAnswer: '',
+      acceptedAssumptions: [],
+      unansweredQuestions: ['What changed after each conversation?'],
+    },
+  ],
+  milestones: [
+    { id: 'sample-milestone', label: 'Complete five conversations', done: false },
+  ],
+  tasks: [
+    { id: 'sample-task', label: 'Invite the first two participants', done: true },
+  ],
+  status: 'active',
+  createdAt: '2026-10-18T13:00:00Z',
+  updatedAt: '2026-10-18T13:00:00Z',
+};
+
 export function PlansScreen({
   refresh,
+  sampleMode,
   onOpen,
   onTemplate,
 }: {
   refresh: number;
+  sampleMode: boolean;
   onOpen: (plan: Plan) => void;
   onTemplate: (template: PlanTemplate) => void;
 }) {
@@ -34,16 +81,30 @@ export function PlansScreen({
   useEffect(() => {
     Vault.list<Plan>('plan').then(setPlans);
   }, [refresh]);
+  const samples = sampleMode && plans.length === 0;
+  const visiblePlans = samples ? [SAMPLE_PLAN] : plans;
   return (
     <ScreenContainer>
       <Header title="Plans" />
       <SafeScrollView>
         <Text style={styles.h2}>Your plans</Text>
-        {plans.length ? (
-          plans.map(plan => (
+        {samples && (
+          <Text style={styles.sampleBadge}>
+            SAMPLE CONTENT · never mixed with your vault
+          </Text>
+        )}
+        {visiblePlans.length ? (
+          visiblePlans.map(plan => (
             <Pressable
               key={plan.id}
-              onPress={() => onOpen(plan)}
+              onPress={() =>
+                samples
+                  ? Alert.alert(
+                      'Sample content',
+                      'Turn off sample mode before editing plans.',
+                    )
+                  : onOpen(plan)
+              }
               style={styles.card}
             >
               <Text style={styles.overline}>{plan.status}</Text>
