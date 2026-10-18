@@ -443,11 +443,13 @@ export function DiscoverScreen({
 export function AboutScreen({
   refresh,
   sampleMode,
+  registerBackHandler,
   onOpenEntry,
   onCreatePlan,
 }: {
   refresh: number;
   sampleMode: boolean;
+  registerBackHandler: (handler: null | (() => void)) => void;
   onOpenEntry: (entryId: string) => void;
   onCreatePlan: (item: ExtractedItem) => void;
 }) {
@@ -456,6 +458,12 @@ export function AboutScreen({
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  useEffect(() => {
+    registerBackHandler(
+      showAnalytics ? () => setShowAnalytics(false) : null,
+    );
+    return () => registerBackHandler(null);
+  }, [registerBackHandler, showAnalytics]);
   useEffect(() => {
     Vault.list<ExtractedItem>('extracted_item').then(values =>
       setItems(

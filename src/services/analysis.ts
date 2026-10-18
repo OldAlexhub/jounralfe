@@ -9,7 +9,8 @@ import type {
 import { Vault } from './vault';
 import { quoteMatchesUtf16, newId } from './text';
 
-const API_BASE = 'https://jorunal.server.oldalexhub.com/api/v1';
+export const ANALYSIS_API_BASE =
+  'https://journal.server.oldalexhub.com/api/v1';
 
 type ServerEntity = {
   name: string;
@@ -33,7 +34,7 @@ type ServerJob = {
 async function credential(): Promise<string> {
   const existing = await Vault.getProtectedSecret('installation_credential');
   if (existing) return existing;
-  const response = await fetch(`${API_BASE}/installations`, {
+  const response = await fetch(`${ANALYSIS_API_BASE}/installations`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -94,7 +95,7 @@ export async function queueEntryAnalysis(
 
 async function deleteRemoteData(token: string): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE}/installation-data`, {
+    const response = await fetch(`${ANALYSIS_API_BASE}/installation-data`, {
       method: 'DELETE',
       headers: { authorization: `Bearer ${token}` },
     });
@@ -135,7 +136,7 @@ export async function analyzeEntry(
   localJob.updatedAt = new Date().toISOString();
   await Vault.put('analysis_job', localJob);
   const token = await credential();
-  const response = await fetch(`${API_BASE}/analysis/jobs`, {
+  const response = await fetch(`${ANALYSIS_API_BASE}/analysis/jobs`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -164,9 +165,12 @@ export async function analyzeEntry(
   let result: ServerJob | undefined;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     await sleep(Math.min(4000, 800 + attempt * 100));
-    const poll = await fetch(`${API_BASE}/analysis/jobs/${accepted.id}`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
+    const poll = await fetch(
+      `${ANALYSIS_API_BASE}/analysis/jobs/${accepted.id}`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+      },
+    );
     if (!poll.ok) throw new Error('Text analysis status is unavailable.');
     result = await poll.json();
     if (
@@ -230,7 +234,7 @@ export async function analyzeEntry(
       updatedAt: now,
     }));
   await Promise.all(topics.map(topic => Vault.put('topic', topic)));
-  await fetch(`${API_BASE}/analysis/jobs/${accepted.id}/ack`, {
+  await fetch(`${ANALYSIS_API_BASE}/analysis/jobs/${accepted.id}/ack`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
@@ -290,7 +294,7 @@ export async function cancelEntryAnalysis(entryId: string): Promise<void> {
   );
   await Promise.all(
     jobs.map(job =>
-      fetch(`${API_BASE}/analysis/jobs/${job.serverJobId}`, {
+      fetch(`${ANALYSIS_API_BASE}/analysis/jobs/${job.serverJobId}`, {
         method: 'DELETE',
         headers: { authorization: `Bearer ${token}` },
       }).catch(() => undefined),

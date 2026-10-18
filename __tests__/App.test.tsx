@@ -1,5 +1,24 @@
 import { appendTranscript, quoteMatchesUtf16 } from '../src/services/text';
 import { createPlan, PLAN_TEMPLATES } from '../src/planTemplates';
+import { resolveAndroidBackAction } from '../src/services/navigation';
+
+describe('Android system back navigation', () => {
+  it('closes nested and detail screens before changing tabs', () => {
+    expect(resolveAndroidBackAction('tabs', 'about', true)).toBe(
+      'close-nested',
+    );
+    expect(resolveAndroidBackAction('editor', 'journal', false)).toBe(
+      'show-tabs',
+    );
+  });
+
+  it('returns secondary tabs to Journal and never exits at the root', () => {
+    expect(resolveAndroidBackAction('tabs', 'plans', false)).toBe(
+      'show-journal',
+    );
+    expect(resolveAndroidBackAction('tabs', 'journal', false)).toBe('stay');
+  });
+});
 
 describe('dictation transcript assembly', () => {
   it('preserves typed text and separates partial text', () => {

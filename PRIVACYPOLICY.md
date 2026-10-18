@@ -16,7 +16,7 @@ Microphone access is requested only when Dictate is tapped. English recognition 
 
 ## Journal insights
 
-Journal insights are enabled by default and can be turned off at any time in Settings. While insights are enabled, saved entry text and selected context are sent automatically over HTTPS to `https://jorunal.server.oldalexhub.com`. The server temporarily reads the text to perform non-generative processing using rules, spaCy's CPU non-transformer English pipeline, TF-IDF, NMF when data is sufficient, and extractive sentence ranking.
+Journal insights are enabled by default and can be turned off at any time in Settings. While insights are enabled, saved entry text and selected context are sent automatically over HTTPS to `https://journal.server.oldalexhub.com`. The server temporarily reads the text to perform non-generative processing using rules, spaCy's CPU non-transformer English pipeline, TF-IDF, NMF when data is sufficient, and extractive sentence ranking.
 
 Text inputs and results are held in bounded process memory, normally for no more than 15 minutes, and are discarded after acknowledgment, cancellation, or expiry. A restart may interrupt a job. PostgreSQL stores only hashed anonymous installation credentials, opaque identifiers, revisions, status, timestamps, durations, expiry metadata, and redacted error codes. It does not store journal text or analysis results. This is encrypted transport and temporary readable server processing—not server-blind end-to-end encryption.
 

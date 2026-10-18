@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Keyboard, Text } from 'react-native';
+import { BackHandler, Image, Keyboard, Text } from 'react-native';
 import {
   KeyboardSafeScreen,
   SafeScrollView,
@@ -16,6 +16,17 @@ export function Onboarding({ onReady }: { onReady: () => void }) {
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        Keyboard.dismiss();
+        if (step > 0) setStep(value => Math.max(0, value - 1));
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [step]);
   const finish = async () => {
     if (password.length < 10)
       return setError(

@@ -5,7 +5,7 @@
 - Suggested category: Lifestyle or Productivity (owner should choose after reviewing current Play taxonomy)
 - Short description: `short-description.txt`
 - Full description: `full-description.txt`
-- Privacy policy: `https://jorunal.server.oldalexhub.com/privacy` only after the deployed page includes a legitimate contact and matches the shipped build
+- Privacy policy: `https://journal.server.oldalexhub.com/privacy` only after the deployed page includes a legitimate contact and matches the shipped build
 
 ## Content rating notes
 

@@ -1,5 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Keyboard, useColorScheme, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  AppState,
+  BackHandler,
+  Keyboard,
+  useColorScheme,
+  View,
+} from 'react-native';
 import { AppShell, SafeBottomBar, TabKey } from './components/layout';
 import { initializeAds } from './components/ads';
 import {
@@ -17,6 +23,7 @@ import {
   retryPendingAnalysisJobs,
   retryPendingRemoteDeletion,
 } from './services/analysis';
+import { resolveAndroidBackAction } from './services/navigation';
 import { AboutScreen, DiscoverScreen } from './screens/InsightScreens';
 import { Onboarding, Unlock } from './screens/AuthScreens';
 import {
@@ -48,6 +55,13 @@ export function AppRoot() {
       .then(exists => setPhase(exists ? 'locked' : 'onboarding'))
       .catch(() => setPhase('onboarding'));
   }, []);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => true,
+    );
+    return () => subscription.remove();
+  }, []);
   if (phase === 'loading')
     return <Centered title="Opening your private space…" />;
   if (phase === 'onboarding')
@@ -71,6 +85,13 @@ function MainApp({ onLock }: { onLock: () => void }) {
   const [refresh, setRefresh] = useState(0);
   const backgroundAt = useRef<number | null>(null);
   const lastInteraction = useRef(Date.now());
+  const nestedBackHandler = useRef<null | (() => void)>(null);
+  const registerNestedBackHandler = useCallback(
+    (handler: null | (() => void)) => {
+      nestedBackHandler.current = handler;
+    },
+    [],
+  );
   configureAppearance(settings.theme, settings.fontScale, systemDark);
   useEffect(() => {
     Vault.get<VaultSettings>('settings', 'settings').then(value => {
@@ -105,6 +126,29 @@ function MainApp({ onLock }: { onLock: () => void }) {
   }, [settings.analysisConsent]);
   useEffect(() => {
     Keyboard.dismiss();
+  }, [route.name, tab]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        Keyboard.dismiss();
+        const action = resolveAndroidBackAction(
+          route.name,
+          tab,
+          Boolean(nestedBackHandler.current),
+        );
+        if (action === 'close-nested') nestedBackHandler.current?.();
+        else if (action === 'show-tabs') {
+          if (route.name === 'plan') setRefresh(value => value + 1);
+          setRoute({ name: 'tabs' });
+        } else if (action === 'show-journal') {
+          setTab('journal');
+          setRoute({ name: 'tabs' });
+        }
+        return true;
+      },
+    );
+    return () => subscription.remove();
   }, [route.name, tab]);
   useEffect(() => {
     const timer = setInterval(() => {
@@ -229,6 +273,7 @@ function MainApp({ onLock }: { onLock: () => void }) {
             <AboutScreen
               refresh={refresh}
               sampleMode={settings.sampleMode}
+              registerBackHandler={registerNestedBackHandler}
               onOpenEntry={openEntry}
               onCreatePlan={createPlanFromInsight}
             />

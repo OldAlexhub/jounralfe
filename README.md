@@ -1,6 +1,6 @@
 # Innerfolio: Journal & Plans
 
-Innerfolio is an Android-only, account-free journal with an encrypted local vault, offline English dictation, reviewable conventional text analysis, and deterministic plan templates. The public API origin is exactly `https://jorunal.server.oldalexhub.com/api/v1`.
+Innerfolio is an Android-only, account-free journal with an encrypted local vault, offline English dictation, reviewable conventional text analysis, and deterministic plan templates. The public API origin is exactly `https://journal.server.oldalexhub.com/api/v1`.
 
 ## Privacy and product boundaries
 

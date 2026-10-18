@@ -8,7 +8,10 @@ jest.mock('../src/services/text', () => ({
 }));
 
 import { DEFAULT_SETTINGS, type JournalEntry } from '../src/models';
-import { queueEntryAnalysis } from '../src/services/analysis';
+import {
+  ANALYSIS_API_BASE,
+  queueEntryAnalysis,
+} from '../src/services/analysis';
 import { Vault } from '../src/services/vault';
 
 const mockList = Vault.list as jest.Mock;
@@ -21,6 +24,12 @@ beforeEach(() => {
 
 it('enables journal insights by default', () => {
   expect(DEFAULT_SETTINGS.analysisConsent).toBe(true);
+});
+
+it('sends analysis only to the canonical production server', () => {
+  expect(ANALYSIS_API_BASE).toBe(
+    'https://journal.server.oldalexhub.com/api/v1',
+  );
 });
 
 it('persists analysis work before a network request is attempted', async () => {

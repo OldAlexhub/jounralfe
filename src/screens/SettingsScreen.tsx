@@ -340,7 +340,7 @@ export function SettingsScreen({
               secondary
               label="Open"
               onPress={() =>
-                Linking.openURL('https://jorunal.server.oldalexhub.com/privacy')
+                Linking.openURL('https://journal.server.oldalexhub.com/privacy')
               }
             />
           </Setting>
